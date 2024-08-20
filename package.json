@@ -48,7 +48,7 @@
     "@sentry/profiling-node": "^8.26.0",
     "@willsoto/nestjs-prometheus": "6.0.0",
     "aws-sdk": "^2.1679.0",
-    "axios": "1.6.8",
+    "axios": "1.7.4",
     "bullmq": "^5.12.9",
     "class-transformer": "0.5.1",
     "class-validator": "0.14.1",
