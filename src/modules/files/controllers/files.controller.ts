@@ -9,18 +9,15 @@ import { BufferedFile } from "../types/buffered-file.type";
 @Controller({ path: "files", version: config.api.versions.anonymous })
 @ApiTags("Files")
 export class FilesController {
-  constructor(
-    private readonly filesService: FilesService,
-  ) {
-  }
+	constructor(private readonly filesService: FilesService) {}
 
-  @Post()
-  @ApiOperation({ summary: "Upload file" })
-  @FileBodyDecorator()
-  @HttpCode(200)
-  async upload(
-    @UploadedFile("file", ParseFileVideoPipe(config.files.maxSize, true)) file: BufferedFile
-  ) {
-    await this.filesService.upload({ file });
-  }
+	@Post()
+	@ApiOperation({ summary: "Upload file" })
+	@FileBodyDecorator()
+	@HttpCode(200)
+	async upload(
+		@UploadedFile("file", ParseFileVideoPipe(config.files.maxSize, true)) file: BufferedFile,
+	) {
+		await this.filesService.upload({ file });
+	}
 }

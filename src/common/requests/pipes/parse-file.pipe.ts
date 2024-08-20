@@ -1,11 +1,4 @@
-import {
-	HttpStatus,
-	ParseFilePipe,
-	MaxFileSizeValidator,
-	FileTypeValidator,
-	ParseFilePipeBuilder,
-} from "@nestjs/common";
-
+import { HttpStatus, ParseFilePipe, MaxFileSizeValidator, FileTypeValidator } from "@nestjs/common";
 
 /**
  * For image

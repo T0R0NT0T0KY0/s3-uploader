@@ -5,16 +5,16 @@ import { filesQueue } from "./constants/tasks.config";
 
 @Global()
 @Module({
-  imports: [
-    BullModule.registerQueue({
-      name: filesQueue,
-        connection: {
-          host: config.cache.host,
-          port: config.cache.port,
-          password: config.cache.password,
-        },
-      }),
-  ],
-  exports: [BullModule]
+	imports: [
+		BullModule.registerQueue({
+			name: filesQueue,
+			connection: {
+				host: config.cache.host,
+				port: config.cache.port,
+				password: config.cache.password,
+			},
+		}),
+	],
+	exports: [BullModule],
 })
 export class TasksModule {}

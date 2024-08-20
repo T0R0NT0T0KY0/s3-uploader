@@ -1,3 +1,3 @@
-export const filesQueue = "file-queue"
+export const filesQueue = "file-queue";
 
-export const uploadFileTask = "upload-file-task"
+export const uploadFileTask = "upload-file-task";

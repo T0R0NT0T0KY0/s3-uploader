@@ -13,7 +13,7 @@ export class FilesService {
 	constructor(
 		@InjectPinoLogger(FilesService.name)
 		private readonly logger: PinoLogger,
-		@InjectQueue(filesQueue) private uploadFileQueue: Queue
+		@InjectQueue(filesQueue) private uploadFileQueue: Queue,
 	) {}
 
 	async upload(data: UploadFileData) {

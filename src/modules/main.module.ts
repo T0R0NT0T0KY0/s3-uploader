@@ -19,5 +19,4 @@ import { TasksModule } from "./tasks/tasks.module";
 		TasksModule,
 	],
 })
-export class MainModule {
-}
+export class MainModule {}
