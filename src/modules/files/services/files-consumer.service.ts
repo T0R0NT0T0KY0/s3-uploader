@@ -1,22 +1,28 @@
-import { S3 } from "aws-sdk";
 import { config } from "@Common/config/config";
+import { resolveWithMetrics } from "@Common/utils/metrics";
+import { CryptoService } from "@Modules/crypto/services/crypto.service";
 import { filesQueue, uploadFileTask } from "@Modules/tasks/constants/tasks.config";
 import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { OnModuleInit, OnModuleDestroy } from "@nestjs/common";
-import { Job } from "bullmq";
-import { exec } from "child_process";
+import { S3 } from "aws-sdk";
+import { Job, MetricsTime } from "bullmq";
+import { exec } from "node:child_process";
 import { InjectPinoLogger } from "nestjs-pino";
 import { PinoLogger } from "nestjs-pino/PinoLogger";
 import { createReadStream, existsSync } from "node:fs";
 import { unlink, mkdir, writeFile, readdir, stat, rmdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { CryptoService } from "../../crypto/services/crypto.service";
 import { BufferedFile } from "../types/buffered-file.type";
-import { resolveWithMetrics } from "@Common/utils/metrics";
 
 export type UploadFileData = { file: BufferedFile };
 
-@Processor(filesQueue)
+@Processor(filesQueue, {
+	concurrency: 2,
+	lockDuration: 600000,
+	metrics: {
+		maxDataPoints: MetricsTime.TWO_WEEKS,
+	},
+})
 export class FilesConsumerService extends WorkerHost implements OnModuleInit, OnModuleDestroy {
 	private readonly tempDir: string;
 	private readonly bucket: string;
@@ -133,7 +139,7 @@ export class FilesConsumerService extends WorkerHost implements OnModuleInit, On
 	private async uploadFile(filePath: string, bucketName: string, key: string) {
 		const partSize = 10 * 1024 * 1024; // 10MB на часть
 
-		const fileStream = createReadStream(filePath, { highWaterMark: partSize }); // Читаем файл по 10 МБ
+		const fileStream = createReadStream(filePath, { highWaterMark: partSize });
 
 		const createMultipartUpload = await this.s3
 			.createMultipartUpload({
@@ -174,18 +180,37 @@ export class FilesConsumerService extends WorkerHost implements OnModuleInit, On
 	}
 
 	async chunkedProcessVideo(inputFilePath: string): Promise<string> {
-		const chunksDir = join(this.tempDir, this.cryptoService.generateUUID());
+		const uuid = this.cryptoService.generateUUID();
+		const chunksDir = join(this.tempDir, uuid);
+		const finalFilePath = join(this.tempDir, `${uuid}.mp4`);
+		const manifestFilePath = join(chunksDir, "manifest.txt");
+
+		const rawChunksDir = join(chunksDir, "raw");
+		const processedChunksDir = join(chunksDir, "processed");
+
+		const segmentTime = 240; // sec
+		const scale = 720;
 
 		try {
-			await mkdir(chunksDir);
+			await Promise.all([
+				mkdir(rawChunksDir, { recursive: true }),
+				mkdir(processedChunksDir, { recursive: true }),
+			]);
 
-			await this.processVideo(inputFilePath, chunksDir, 720, 240);
+			await this.splitFile(inputFilePath, rawChunksDir, segmentTime);
 
-			const chunks = await readdir(chunksDir);
+			const rawChunks = await readdir(rawChunksDir);
 
-			const chunksPaths = chunks.map((file) => join(chunksDir, file));
+			const processedChunksPaths: string[] = [];
 
-			return await this.concatChunks(chunksPaths);
+			for (const file of rawChunks) {
+				const filePath = join(processedChunksDir, file);
+				await this.processVideo(join(rawChunksDir, file), filePath, scale);
+				processedChunksPaths.push(filePath);
+			}
+
+			await this.concatChunks(processedChunksPaths, finalFilePath, manifestFilePath);
+			return finalFilePath;
 		} catch (error) {
 			this.logger.error("Chunked Process Video Error");
 			throw error;
@@ -194,34 +219,19 @@ export class FilesConsumerService extends WorkerHost implements OnModuleInit, On
 		}
 	}
 
-	async processVideo(
-		inputFile: string,
-		outputDirectory: string,
-		scale: number,
-		segmentTime: number,
-	) {
+	private async splitFile(inputFile: string, outputDirectory: string, segmentTime: number) {
 		const output = resolve(`${outputDirectory}/chunk-%03d.mp4`);
 		const input = resolve(inputFile);
 
 		const options = [
-			`-vf scale=-2:${scale}`, // Масштабирование видео
-			"-c:v libx264", // Кодек видео
-			"-preset veryfast", // Скорость кодирования
-			"-crf 28", // Качество видео
-			"-c:a aac", // Кодек аудио
-			"-b:a 128k", // Битрейт аудио
-			"-movflags +faststart", // Оптимизация для прогрессивного скачивания
-			`-maxrate 1M`, // Максимальный битрейт
-			`-bufsize 2M`, // Размер буфера
-			"-profile:v baseline", // Профиль кодека H.264
-			"-level 3.1", // Уровень кодека H.264
+			`-i ${input}`,
+			`-c copy`,
 			"-f segment",
-			"-reset_timestamps 1",
 			`-segment_time ${segmentTime}`,
-			`-segment_format mp4`,
+			"-reset_timestamps 1",
 		].join(" ");
 
-		const command = `ffmpeg -i ${input} ${options} ${output}`;
+		const command = `ffmpeg ${options} ${output}`;
 
 		await new Promise((resolve, reject) => {
 			exec(command, (error, stdout, stderr) => {
@@ -237,25 +247,54 @@ export class FilesConsumerService extends WorkerHost implements OnModuleInit, On
 		});
 	}
 
-	private async concatChunks(chunkFiles: string[]) {
+	private async processVideo(inputFile: string, outputFile: string, scale: number) {
+		const input = resolve(inputFile);
+		const output = resolve(outputFile);
+
+		const options = [
+			`-i ${input}`,
+			`-vf scale=-2:${scale}`, // Масштабирование видео
+			"-c:v libx264", // Кодек видео
+			"-preset veryfast", // Скорость кодирования
+			"-crf 28", // Качество видео
+			"-c:a aac", // Кодек аудио
+			"-b:a 128k", // Битрейт аудио
+			"-movflags +faststart", // Оптимизация для прогрессивного скачивания
+			`-maxrate 1M`, // Максимальный битрейт
+			`-bufsize 2M`, // Размер буфера
+			"-profile:v baseline", // Профиль кодека H.264
+			"-level 3.1", // Уровень кодека H.264
+		].join(" ");
+
+		const command = `ffmpeg ${options} ${output}`;
+
+		await new Promise((resolve, reject) => {
+			exec(command, (error, stdout, stderr) => {
+				if (error) {
+					return reject(error);
+				}
+				if (stderr) {
+					return resolve(stderr);
+				}
+
+				resolve(stdout);
+			});
+		});
+	}
+
+	private async concatChunks(chunkFiles: string[], outputPath: string, manifestPath: string) {
 		const chunkFilesAbsolutePaths = chunkFiles.map((path) => resolve(path));
 
-		if (chunkFilesAbsolutePaths.length === 1) {
-			return chunkFilesAbsolutePaths[0];
-		}
+		const output = resolve(outputPath);
 
-		const uuid = this.cryptoService.generateUUID();
-
-		const outputFilePath = resolve(join(this.tempDir, `${uuid}.mp4`));
-
-		const manifestFilePath = resolve(join(this.tempDir, `${uuid}_video_manifest.txt`));
+		const manifestFilePath = resolve(manifestPath);
 
 		try {
 			const manifestContent = chunkFilesAbsolutePaths.map((file) => `file '${file}'`).join("\n");
 
 			await writeFile(manifestFilePath, manifestContent);
 
-			const command = `ffmpeg -f concat -safe 0 -i ${manifestFilePath} -c copy ${outputFilePath}`;
+			const command = `ffmpeg -f concat -safe 0 -i ${manifestFilePath} -c copy ${output}`;
 
 			await new Promise((resolve, reject) => {
 				exec(command, (error, stdout, stderr) => {
@@ -269,10 +308,6 @@ export class FilesConsumerService extends WorkerHost implements OnModuleInit, On
 					resolve(stdout);
 				});
 			});
-
-			await Promise.all(chunkFiles.map((chunkFile) => unlink(chunkFile)));
-
-			return outputFilePath;
 		} catch (error) {
 			this.logger.error("Process Video Error");
 			throw error;
