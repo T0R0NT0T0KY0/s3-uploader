@@ -220,8 +220,8 @@
 		}
 	},
 	"info": {
-		"title": "yandex-cloud-uploader",
-		"description": "Yandex Cloud Uploader",
+		"title": "s3-cloud-uploader",
+		"description": "S3 Uploader",
 		"version": "1.0.0",
 		"contact": {
 			"name": "DTF",
