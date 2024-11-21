@@ -96,8 +96,8 @@ importers:
         specifier: 1.4.3
         version: 1.4.3
       swagger-ui-express:
-        specifier: 5.0.0
-        version: 5.0.0(express@4.19.2)
+        specifier: 5.0.1
+        version: 5.0.1(express@4.19.2)
     devDependencies:
       '@nestjs/cli':
         specifier: 10.3.2
@@ -3455,8 +3455,8 @@ packages:
   swagger-ui-dist@5.17.14:
     resolution: {integrity: sha512-CVbSfaLpstV65OnSjbXfVd6Sta3q3F7Cj/yYuvHMp1P90LztOLs6PfUnKEVAeiIVQt9u2SaPwv0LiH/OyMjHRw==}
 
-  swagger-ui-express@5.0.0:
-    resolution: {integrity: sha512-tsU9tODVvhyfkNSvf03E6FAk+z+5cU3lXAzMy6Pv4av2Gt2xA0++fogwC4qo19XuFf6hdxevPuVCSKFuMHJhFA==}
+  swagger-ui-express@5.0.1:
+    resolution: {integrity: sha512-SrNU3RiBGTLLmFU8GIJdOdanJTl4TOmT27tt3bWWHppqYmAZ6IDuEuBvMU6nZq0zLEe6b/1rACXCgLZqO6ZfrA==}
     engines: {node: '>= v0.10.32'}
     peerDependencies:
       express: '>=4.0.0 || >=5.0.0-beta'
@@ -7615,7 +7615,7 @@ snapshots:
 
   swagger-ui-dist@5.17.14: {}
 
-  swagger-ui-express@5.0.0(express@4.19.2):
+  swagger-ui-express@5.0.1(express@4.19.2):
     dependencies:
       express: 4.19.2
       swagger-ui-dist: 5.17.14
